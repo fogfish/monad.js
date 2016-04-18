@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<!--
+//
+// Copyright (C) 2016 Dmitry Kolesnikov
+//
+// This software may be modified and distributed under the terms
+// of the MIT license.  See the LICENSE file for details.
+//
+-->
+
+<!-- 
+
+The example is shows the SAM pattern implementation using IO-monad
+   V = S( vm( M.present( A(data) ) ), nap(M))
+
+See for details:
+http://www.infoq.com/articles/no-more-mvc-frameworks
+http://jdubray.github.io/sam/
+
+-->
+
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://gsf.github.io/whiskers.js/whiskers.min.js"></script>
+<script src="../src/monad.js"></script>
+
+<style type="text/css">
+.red{color: red;}
+.green{color: green;}
+.black{color: black;}
+</style>
+
+<body>
+<button id="launch">Launch</button> <button id="abort">Abort</button>
+<div></div>
+
+<script type="text/javascript">
+
+//
+// Global application model
+var COUNTER_MAX = 10;
+var model = {
+   counter: COUNTER_MAX, 
+   started: false,      
+   launched: false, 
+   aborted: false
+};
+
+//
+// 
+var decrement = function(t, timeout, accept)
+{
+   d3.timer(function(){accept(t - 1); return true;}, timeout)
+}.curry();
+
+//
+//
+var cancel = function(timeout, accept)
+{
+   d3.timer(function(){accept(true); return true;}, timeout)
+}.curry();
+
+//
+//
+var counting = function(model, t)
+{
+   if (!model.aborted)
+   {
+      model.counter  = t;
+      model.started  = t  > 0 ? true : false;
+      model.launched = t == 0 ? true : false;
+   }
+   return model;
+}.curry();
+
+//
+//
+var aborted = function(model, signal)
+{
+   if ((!model.launched) && (signal))
+   {
+      model.started  = false;
+      model.launched = false; 
+      model.aborted  = true;
+   }
+   return model;
+}.curry();
+
+
+//
+//
+var display = function(ui, model)
+{
+   // represent
+   var r = {
+      t: "" + model.counter,
+      color: model.aborted ? "red" : (model.launched ? "green" : "black") 
+   };
+   d3.select('div').html( ui(r) );
+   return model
+}.curry();
+
+
+var counter = whiskers.compile('<p>Count down: <strong class="{color}">{t}</strong></p>');
+
+//
+//
+var next = function(model)
+{
+   if ((model.counter > 0) && (!model.aborted))
+      tick(model.counter);
+   return model;
+}.curry();
+
+
+//
+//
+var init = function()
+{
+   monad.do([
+      monad.IO(model.counter),
+      counting(model),
+      display(counter)
+   ])
+}
+
+var tick = function(t)
+{
+   monad.do([
+      monad.IO(decrement(t, 1000)),
+      counting(model),
+      display(counter),
+      next
+   ])
+}
+
+var abort = function()
+{
+   monad.do([
+      monad.IO(cancel(200)),
+      aborted(model),
+      display(counter)
+   ])
+}
+
+d3.select('#launch').on('click', function(x){tick(COUNTER_MAX)});
+d3.select('#abort').on('click', function(x){abort()});
+
+init();
+
+</script>
+</body>
