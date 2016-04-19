@@ -40,9 +40,10 @@
       return list.reduce(function(acc, x){return acc.bind(x);}, head);
    }
 
+   //
+   // 
    monad.IO = function(value)
    {
-    
       if (!!(value && value.constructor && value.call && value.apply)) 
       {
          return new Promise(
@@ -57,6 +58,33 @@
    };
    Promise.prototype.bind = Promise.prototype.then;
    Promise.prototype.fail = Promise.prototype.catch;
+
+   //
+   //
+   monad.UI = function(value)
+   {
+      return new UI(value)
+   }
+
+   var UI = function(value)
+   {
+      this.list = [];
+      var list  = this.list;
+
+      // acceptor function is used by function/value to trigger action chain
+      // promise is used to bind computation to IO monad in lazy manner
+      var accept = function(x) {
+         var head = Promise.resolve(x);
+         list.reduce(function(acc, x){return acc.bind(x);}, head);
+      }
+      value(accept)
+   }
+
+   UI.prototype.bind = function(fun)
+   {
+      this.list.push(fun)
+      return this
+   }
 
    root.monad = monad;
 }));

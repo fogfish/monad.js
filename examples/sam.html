@@ -10,14 +10,50 @@
 
 <!-- 
 
-The example is shows the SAM pattern implementation using IO-monad
-   V = S( vm( M.present( A(data) ) ), nap(M))
-
-See for details:
+The uses SAM technique developed at (see links below) as baseline for 
+pure functional design of front-end components
 http://www.infoq.com/articles/no-more-mvc-frameworks
 http://jdubray.github.io/sam/
 
+
+The challenge of MVC-based frameworks is a poorly designed API which 
+induces the programmer to mix multiple concerns in one component. 
+
+Let's build a web app with no MVC framework whatsoever, using just plain 
+old JavaScript function. The author of these documents has developed a pattern 
+State-Action-Model to facilitate reactive development
+
+   V = S( vm( M.present( A(data) ) ), nap(M))
+
+This patterns define a computation flow using a pure side-effect free functions.
+The action (A: event -> data) computes data from various events. The data is
+present to the model (M.present: data -> model) and triggers necessary update
+actions. The view is rendered using model state (S: model -> view).
+
+We can declare a minimal contract between model and view, the pure functional view
+allow us adapt the model as required by view. 
+
+There is a weak points here
+* the next-action predicate (nap) is defined as callback to invoke continuation. 
+* there are not strict abstraction on the functional composition 
+  (e.g. author examples fall-back to traditional callback approach)
+* the model is responsible for its persistence but its functional abstraction is omitted.
+
+We can observe that Action(s) is only pure as event mapper but event generator is 
+a function with side-effect. Thus, this is IO-monad. SAM patterns is monadic computation
+```
+do
+   data   <- A
+   model  <- M.present(data)
+   view   <- S( vm(model) )
+   action <- nap(model) 
+```
+
+Let's use controls a rocket launcher example to demonstrate the usage of monad's in reactive 
+development. The application model and its state-machine is derived from original posts.
+
 -->
+
 
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="http://gsf.github.io/whiskers.js/whiskers.min.js"></script>
@@ -35,9 +71,11 @@ http://jdubray.github.io/sam/
 
 <script type="text/javascript">
 
-//
-// Global application model
 var COUNTER_MAX = 10;
+var COUNTER_MIN = 0;
+
+//
+// application model is singleton
 var model = {
    counter: COUNTER_MAX, 
    started: false,      
@@ -45,107 +83,219 @@ var model = {
    aborted: false
 };
 
-//
-// 
-var decrement = function(t, timeout, accept)
-{
-   d3.timer(function(){accept(t - 1); return true;}, timeout)
-}.curry();
 
+//-----------------------------------------------------------------------------
 //
+// side-effect actions
 //
-var cancel = function(timeout, accept)
+//----------------------------------------------------------------------------- 
+var action = (function()
 {
-   d3.timer(function(){accept(true); return true;}, timeout)
-}.curry();
+   var self = {};
 
-//
-//
-var counting = function(model, t)
-{
-   if (!model.aborted)
+   //
+   // action decrement clock value once timeout exhausted, 
+   // the new timer value is proposed to acceptor 
+   self.decrement = function(t, timeout, acceptor)
    {
-      model.counter  = t;
-      model.started  = t  > 0 ? true : false;
-      model.launched = t == 0 ? true : false;
-   }
-   return model;
-}.curry();
+      d3.timer(
+         function()
+         {
+            acceptor(t - 1); 
+            return true;
+         }, 
+         timeout
+      );
+   }.curry();
 
-//
-//
-var aborted = function(model, signal)
-{
-   if ((!model.launched) && (signal))
+   //
+   // the launch action proposed max counter value on user action
+   self.launch = function(acceptor)
    {
-      model.started  = false;
-      model.launched = false; 
-      model.aborted  = true;
+      d3.select('#launch').on('click', 
+         function(_)
+         {
+            acceptor(COUNTER_MAX)
+         }
+      ); 
+   }.curry();
+
+   //
+   // the cancel action aborts the procedure
+   self.cancel = function(acceptor)
+   {
+      d3.select('#abort').on('click',
+         function(_)
+         {
+            acceptor(COUNTER_MIN)
+         }
+      )
+   }.curry();
+
+   return self;   
+})();
+
+
+//-----------------------------------------------------------------------------
+//
+// model presenter
+//
+//-----------------------------------------------------------------------------
+var presenter = (function()
+{
+   var self = {};
+
+   //
+   //
+   self.counting = function(model, t)
+   {
+      if (!model.aborted)
+      {
+         model.counter  = t;
+         model.started  = t  > 0 ? true : false;
+         model.launched = t == 0 ? true : false;
+      }
+      return model;
+   }.curry();
+
+   //
+   //
+   self.aborted = function(model, t)
+   {
+      if ((!model.launched) && (t === COUNTER_MIN))
+      {
+         model.started  = false;
+         model.launched = false; 
+         model.aborted  = true;
+      }
+      return model;
+   }.curry();
+
+   return self;
+})();
+
+
+//-----------------------------------------------------------------------------
+//
+// state
+//
+//-----------------------------------------------------------------------------
+var state = (function()
+{
+   var self = {};
+   
+   //
+   //
+   var vm = function(model)
+   {
+      var color = model.aborted ? "red" : (model.launched ? "green" : "black");
+      return {t: "" + model.counter, color: color};
    }
-   return model;
-}.curry();
+
+   //
+   //
+   self.display = function(ui, model)
+   {
+      d3.select('div').html( ui(vm(model)) );
+      return model
+   }.curry();
+
+   return self;
+})();
 
 
+//-----------------------------------------------------------------------------
 //
+// view
 //
-var display = function(ui, model)
+//-----------------------------------------------------------------------------
+var view = (function()
 {
-   // represent
-   var r = {
-      t: "" + model.counter,
-      color: model.aborted ? "red" : (model.launched ? "green" : "black") 
-   };
-   d3.select('div').html( ui(r) );
-   return model
-}.curry();
+   var self = {};
+
+   //
+   //
+   self.counter = whiskers.compile('<p>Count down: <strong class="{color}">{t}</strong></p>');
+
+   return self;
+})();
+
+//-----------------------------------------------------------------------------
+//
+// next-action predicate
+//
+//-----------------------------------------------------------------------------
+var nap = (function()
+{
+   var self = {};
+
+   //
+   //
+   self.continuation = function(model)
+   {
+      if ((model.counter > 0) && (!model.aborted))
+         computation.tick(model.counter);
+      return model;
+   }.curry();
+
+   return self;
+})();
 
 
-var counter = whiskers.compile('<p>Count down: <strong class="{color}">{t}</strong></p>');
+//-----------------------------------------------------------------------------
+//
+// re-usable computation(s) 
+//
+//-----------------------------------------------------------------------------
+var computation = (function()
+{
+   var self  = {};
+
+   self.tick = function(t)
+   {
+      monad.do([
+         monad.IO(action.decrement(t, 1000)),
+         presenter.counting(model),
+         state.display(view.counter),
+         nap.continuation
+      ])
+   }
+
+   return self;
+})();
+
+//-----------------------------------------------------------------------------
+//
+// entry point
+//
+//-----------------------------------------------------------------------------
+
 
 //
 //
-var next = function(model)
-{
-   if ((model.counter > 0) && (!model.aborted))
-      tick(model.counter);
-   return model;
-}.curry();
+monad.do([
+   monad.UI(action.launch),
+   presenter.counting(model),
+   state.display(view.counter),
+   nap.continuation
+]);
 
 
 //
 //
-var init = function()
-{
-   monad.do([
-      monad.IO(model.counter),
-      counting(model),
-      display(counter)
-   ])
-}
+monad.do([
+   monad.UI(action.cancel),
+   presenter.aborted(model),
+   state.display(view.counter)
+])
 
-var tick = function(t)
-{
-   monad.do([
-      monad.IO(decrement(t, 1000)),
-      counting(model),
-      display(counter),
-      next
-   ])
-}
-
-var abort = function()
-{
-   monad.do([
-      monad.IO(cancel(200)),
-      aborted(model),
-      display(counter)
-   ])
-}
-
-d3.select('#launch').on('click', function(x){tick(COUNTER_MAX)});
-d3.select('#abort').on('click', function(x){abort()});
-
-init();
+//
+//
+monad.do([
+   monad.IO(COUNTER_MAX),
+   presenter.counting(model),
+   state.display(view.counter)
+]);
 
 </script>
 </body>
