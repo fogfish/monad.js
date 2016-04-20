@@ -10,50 +10,50 @@
 
 <!-- 
 
-The uses SAM technique developed at (see links below) as baseline for 
+The example uses SAM technique developed at (see links below) as baseline for 
 pure functional design of front-end components
 http://www.infoq.com/articles/no-more-mvc-frameworks
 http://jdubray.github.io/sam/
 
 
-The challenge of MVC-based frameworks is a poorly designed API which 
+The challenge of MVC-based frameworks is a poorly designed interfaces which 
 induces the programmer to mix multiple concerns in one component. 
 
 Let's build a web app with no MVC framework whatsoever, using just plain 
-old JavaScript function. The author of these documents has developed a pattern 
-State-Action-Model to facilitate reactive development
+old JavaScript function. The State-Action-Model pattern facilitate our reactive 
+development
 
    V = S( vm( M.present( A(data) ) ), nap(M))
 
-This patterns define a computation flow using a pure side-effect free functions.
+It define a computation flow using a pure side-effect free functions.
 The action (A: event -> data) computes data from various events. The data is
 present to the model (M.present: data -> model) and triggers necessary update
-actions. The view is rendered using model state (S: model -> view).
+actions. The view is rendered using model state (S: model -> view). We can declare 
+a minimal contract between model and view, the pure functional view allow us adapt 
+the model as required by view (view-model / vm transformation). 
 
-We can declare a minimal contract between model and view, the pure functional view
-allow us adapt the model as required by view. 
-
-There is a weak points here
+There are weak points in the proposal
 * the next-action predicate (nap) is defined as callback to invoke continuation. 
-* there are not strict abstraction on the functional composition 
-  (e.g. author examples fall-back to traditional callback approach)
+* there is not strict abstraction on the functional composition, the fall-back to 
+  traditional callback approach is plausible. 
 * the model is responsible for its persistence but its functional abstraction is omitted.
 
-We can observe that Action(s) is only pure as event mapper but event generator is 
-a function with side-effect. Thus, this is IO-monad. SAM patterns is monadic computation
+Actions are pure functions - the computation that produces event. We need to pass this 
+result (event) to further computation and so on. The bind (`>>=`) operation allow us to 
+formalize a computation which runs `x`, then applies `f` to its result, getting a computation 
+which it then runs `x >>= f`. Let's expose SAM pattern as monadic computation. 
 ```
 do
    data   <- A
    model  <- M.present(data)
    view   <- S( vm(model) )
-   action <- nap(model) 
+   action <- nap(model)
 ```
 
 Let's use controls a rocket launcher example to demonstrate the usage of monad's in reactive 
 development. The application model and its state-machine is derived from original posts.
 
 -->
-
 
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="http://gsf.github.io/whiskers.js/whiskers.min.js"></script>
@@ -86,16 +86,39 @@ var model = {
 
 //-----------------------------------------------------------------------------
 //
-// side-effect actions
+// pure actions
 //
 //----------------------------------------------------------------------------- 
+
+// 
+// Let's consider action as a computation that produces event, we need to pass 
+// this result to further computation and so on. The bind (>>=) operation allow
+// us to formalize a computation which runs x, then applies f to its result, 
+// getting a computation which it then runs ( x >>= f ). We defined a instances of
+// IO and UI monads to benefit function binding in asynchronous environment.
+//
+// e.g. the following function wrap network I/O to monadic computation. The computation
+// takes an acceptor function as parameter, which is used by i/o routine to propose 
+// accepted value to computation chain.
+//   monad.IO(function(acceptor){d3.json("/url", acceptor)})
+//
+// Any further computation (pure functions) are bind together
+//   monad.IO(...)
+//      .bind(function(x){return x + 1})
+// 
+// or using 
+//   monad.do([
+//      monad.IO(...), 
+//      function(x){return x + 1})
+//   ])
+//
 var action = (function()
 {
    var self = {};
 
    //
-   // action decrement clock value once timeout exhausted, 
-   // the new timer value is proposed to acceptor 
+   // action decrement clock value (t) once timeout expired, 
+   // the new timer value is proposed using acceptor function 
    self.decrement = function(t, timeout, acceptor)
    {
       d3.timer(
@@ -109,7 +132,7 @@ var action = (function()
    }.curry();
 
    //
-   // the launch action proposed max counter value on user action
+   // the launch action proposed a max clock value on user action.
    self.launch = function(acceptor)
    {
       d3.select('#launch').on('click', 
@@ -121,7 +144,7 @@ var action = (function()
    }.curry();
 
    //
-   // the cancel action aborts the procedure
+   // the cancel action propose a min clock value, which resets timer.
    self.cancel = function(acceptor)
    {
       d3.select('#abort').on('click',
@@ -146,7 +169,8 @@ var presenter = (function()
    var self = {};
 
    //
-   //
+   // the function updates the model state
+   // count-down the timer and launches the rocket  
    self.counting = function(model, t)
    {
       if (!model.aborted)
@@ -159,7 +183,7 @@ var presenter = (function()
    }.curry();
 
    //
-   //
+   // the function aborts rocker launch procedure
    self.aborted = function(model, t)
    {
       if ((!model.launched) && (t === COUNTER_MIN))
@@ -185,7 +209,7 @@ var state = (function()
    var self = {};
    
    //
-   //
+   // helper view-model function to build presentation from the model
    var vm = function(model)
    {
       var color = model.aborted ? "red" : (model.launched ? "green" : "black");
@@ -193,7 +217,7 @@ var state = (function()
    }
 
    //
-   //
+   // takes ui-theme (pure function), applies presentation model and updated DOM
    self.display = function(ui, model)
    {
       d3.select('div').html( ui(vm(model)) );
@@ -214,7 +238,7 @@ var view = (function()
    var self = {};
 
    //
-   //
+   // pure function to render counter
    self.counter = whiskers.compile('<p>Count down: <strong class="{color}">{t}</strong></p>');
 
    return self;
@@ -230,7 +254,7 @@ var nap = (function()
    var self = {};
 
    //
-   //
+   // the action predicate check the counter status and issue counter update  
    self.continuation = function(model)
    {
       if ((model.counter > 0) && (!model.aborted))
@@ -251,6 +275,21 @@ var computation = (function()
 {
    var self  = {};
 
+   //
+   // init system
+   self.init = function()
+   {
+      monad.do([
+         monad.IO(COUNTER_MAX),
+         presenter.counting(model),
+         state.display(view.counter)
+      ]);
+      self.launch();
+      self.cancel();
+   }
+
+   //
+   // decrement counter
    self.tick = function(t)
    {
       monad.do([
@@ -258,6 +297,29 @@ var computation = (function()
          presenter.counting(model),
          state.display(view.counter),
          nap.continuation
+      ])
+   }
+
+   //
+   // launch rocker
+   self.launch = function()
+   {
+      monad.do([
+         monad.UI(action.launch),
+         presenter.counting(model),
+         state.display(view.counter),
+         nap.continuation
+      ]);
+   }
+
+   //
+   // cancel launch procedure
+   self.cancel = function()
+   {
+      monad.do([
+         monad.UI(action.cancel),
+         presenter.aborted(model),
+         state.display(view.counter)
       ])
    }
 
@@ -269,33 +331,7 @@ var computation = (function()
 // entry point
 //
 //-----------------------------------------------------------------------------
-
-
-//
-//
-monad.do([
-   monad.UI(action.launch),
-   presenter.counting(model),
-   state.display(view.counter),
-   nap.continuation
-]);
-
-
-//
-//
-monad.do([
-   monad.UI(action.cancel),
-   presenter.aborted(model),
-   state.display(view.counter)
-])
-
-//
-//
-monad.do([
-   monad.IO(COUNTER_MAX),
-   presenter.counting(model),
-   state.display(view.counter)
-]);
+computation.init();
 
 </script>
 </body>
