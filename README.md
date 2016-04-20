@@ -23,7 +23,7 @@ The library is hosted using http://rawgit.com service. Use the following code to
 
 ### Usage
 
-The library provides a Rocket Launch example as SAM pattern show case, it uses 
+The library provides a [Rocket Launch example](examples/sam.html) as SAM pattern show case, it uses 
 * d3.js for I/O and DOM manipulation
 * whiskers.js to build a pure view function 
 
