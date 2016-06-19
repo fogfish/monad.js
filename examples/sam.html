@@ -119,17 +119,19 @@ var action = (function()
    //
    // action decrement clock value (t) once timeout expired, 
    // the new timer value is proposed using acceptor function 
-   self.decrement = function(t, timeout, acceptor)
-   {
-      d3.timer(
-         function()
-         {
-            acceptor(t - 1); 
-            return true;
-         }, 
-         timeout
-      );
-   }.curry();
+   self.decrement = monad.curry(
+      function(t, timeout, acceptor)
+      {
+         d3.timer(
+            function()
+            {
+               acceptor(t - 1); 
+               return true;
+            }, 
+            timeout
+         );
+      }
+   );
 
    //
    // the launch action proposed a max clock value on user action.
@@ -141,7 +143,7 @@ var action = (function()
             acceptor(COUNTER_MAX)
          }
       ); 
-   }.curry();
+   }.$_();
 
    //
    // the cancel action propose a min clock value, which resets timer.

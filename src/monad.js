@@ -29,12 +29,14 @@
       };
       return curry(this, [])
    };
+   Function.prototype.$_ = Function.prototype.curry
 
    //
    // @see 
    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
    var monad = {};
-   monad.do = function(list)
+   monad.curry = function(fn){return fn.curry()};
+   monad.do  = function(list)
    {
       var head = list.shift();
       return list.reduce(function(acc, x){return acc.bind(x);}, head);
