@@ -36,6 +36,7 @@
    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
    var monad = {};
    monad.curry = function(fn){return fn.curry()};
+   monad.$_  = monad.curry;
    monad.do  = function(list)
    {
       var head = list.shift();
