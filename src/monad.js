@@ -39,8 +39,8 @@
    monad.$_  = monad.curry;
    monad.do  = function(list)
    {
-      var head = list.shift();
-      return list.reduce(function(acc, x){return acc.bind(x);}, head);
+      var head = list.shift()
+      return list.reduce(function(acc, x){return acc.bind(x)}, head)
    }
 
    //
@@ -59,8 +59,8 @@
          return Promise.resolve(value)
       }
    };
-   Promise.prototype.bind = Promise.prototype.then;
-   Promise.prototype.fail = Promise.prototype.catch;
+   Promise.prototype.bind = Promise.prototype.then
+   Promise.prototype.fail = Promise.prototype.catch
 
    //
    //
@@ -71,23 +71,33 @@
 
    var UI = function(value)
    {
-      this.list = [];
-      var list  = this.list;
+      this.plist = []
+      this.flist = []
+      var plist  = this.plist
+      var flist  = this.flist
 
       // acceptor function is used by function/value to trigger action chain
       // promise is used to bind computation to IO monad in lazy manner
       var accept = function(x) {
-         var head = Promise.resolve(x);
-         list.reduce(function(acc, x){return acc.bind(x);}, head);
+         var head = Promise.resolve(x)
+         var tail = plist.reduce(function(acc, x){return acc.bind(x)}, head)
+         if (flist.length > 0)
+            tail.fail(flist[0])
       }
       value(accept)
    }
 
    UI.prototype.bind = function(fun)
    {
-      this.list.push(fun)
+      this.plist.push(fun)
       return this
    }
 
-   root.monad = monad;
+   UI.prototype.fail = function(fun)
+   {
+      this.flist.push(fun)
+      return this
+   }
+
+   root.monad = monad
 }));
