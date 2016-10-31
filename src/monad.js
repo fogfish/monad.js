@@ -42,6 +42,10 @@
       var head = list.shift()
       return list.reduce(function(acc, x){return acc.bind(x)}, head)
    }
+   monad.do_ = function(list)
+   {
+      return function(_){return monad.do(list)}
+   }
 
    //
    // 
