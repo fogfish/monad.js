@@ -37,10 +37,16 @@
    var monad = {};
    monad.curry = function(fn){return fn.curry()};
    monad.$_  = monad.curry;
-   monad.do  = function(list)
+   monad.do  = function()
    {
-      var head = list.shift()
-      return list.reduce(function(acc, x){return acc.bind(x)}, head)
+      if (arguments.length == 0)
+      {
+         return Promise.resolve(true)
+      } else {
+         var list = arguments[0]
+         var head = list.shift()
+         return list.reduce(function(acc, x){return acc.bind(x)}, head)
+      }
    }
    monad.fold  = function(headM, tail)
    {
