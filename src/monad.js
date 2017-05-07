@@ -42,6 +42,31 @@
       var head = list.shift()
       return list.reduce(function(acc, x){return acc.bind(x)}, head)
    }
+   monad.fold  = function(headM, tail)
+   {
+      var head = tail.shift()
+      return tail.reduce(function(acc, x){return acc.bind(x)}, headM.bind(function(_){return head}))
+   }
+
+   //
+   //
+   monad.liftM0 = function(fn)
+   {
+      return function(x)
+      {
+         fn.apply(this, [])
+         return x
+      }
+   }
+
+   monad.liftM1 = function(fn)
+   {
+      return function(x)
+      {
+         fn.apply(this, [x])
+         return x
+      }
+   }
 
    //
    // 
